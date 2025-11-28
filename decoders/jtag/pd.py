@@ -188,8 +188,9 @@ class Decoder(srd.Decoder):
             t = self.state.value[-2:] + ' TDI'
             self.bits_tdi.reverse()
             self.bits_samplenums_tdi.reverse()
-            b = ''.join(map(str, self.bits_tdi[1:]))
-            h = ' (0x%x' % int('0b0' + b, 2) + ')'
+            bits_tdi_decoded = sum(bit << idx for idx, bit in enumerate(self.bits_tdi[1:][::-1]))
+            b = bin(bits_tdi_decoded)[2:].rjust(len(self.bits_tdi[1:]), '0')
+            h = ' (0x%x)' % bits_tdi_decoded
             s = t + ': ' + b + h + ', ' + str(len(self.bits_tdi[1:])) + ' bits'
             self.putx_bs([18, [s]])
             self.putp_bs([t, [b, self.bits_samplenums_tdi[1:]]])
@@ -199,8 +200,9 @@ class Decoder(srd.Decoder):
             t = self.state.value[-2:] + ' TDO'
             self.bits_tdo.reverse()
             self.bits_samplenums_tdo.reverse()
-            b = ''.join(map(str, self.bits_tdo[1:]))
-            h = ' (0x%x' % int('0b0' + b, 2) + ')'
+            bits_tdo_decoded = sum(bit << idx for idx, bit in enumerate(self.bits_tdo[1:][::-1]))
+            b = bin(bits_tdo_decoded)[2:].rjust(len(self.bits_tdo[1:]), '0')
+            h = ' (0x%x)' % bits_tdo_decoded
             s = t + ': ' + b + h + ', ' + str(len(self.bits_tdo[1:])) + ' bits'
             self.putx_bs([19, [s]])
             self.putp_bs([t, [b, self.bits_samplenums_tdo[1:]]])
