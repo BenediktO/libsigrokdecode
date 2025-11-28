@@ -50,6 +50,30 @@ St = SrdStrEnum.from_str('St', s)
 
 jtag_states = [s.value for s in St]
 
+# jump table for JTAG state machine, 0 = TMS=0, 1 = TMS=1
+jtag_state_jumps = {
+    # Intro "tree"
+    St.TEST_LOGIC_RESET: [St.RUN_TEST_IDLE, St.TEST_LOGIC_RESET],
+    St.RUN_TEST_IDLE:    [St.RUN_TEST_IDLE, St.SELECT_DR_SCAN],
+    # DR "tree"
+    St.SELECT_DR_SCAN:   [St.CAPTURE_DR,    St.SELECT_IR_SCAN],
+    St.CAPTURE_DR:       [St.SHIFT_DR,      St.EXIT1_DR],
+    St.SHIFT_DR:         [St.SHIFT_DR,      St.EXIT1_DR],
+    St.EXIT1_DR:         [St.PAUSE_DR,      St.UPDATE_DR],
+    St.PAUSE_DR:         [St.PAUSE_DR,      St.EXIT2_DR],
+    St.EXIT2_DR:         [St.SHIFT_DR,      St.UPDATE_DR],
+    St.UPDATE_DR:        [St.RUN_TEST_IDLE, St.SELECT_DR_SCAN],
+    # IR "tree"
+    St.SELECT_IR_SCAN:   [St.CAPTURE_IR,    St.TEST_LOGIC_RESET],
+    St.CAPTURE_IR:       [St.SHIFT_IR,      St.EXIT1_IR],
+    St.SHIFT_IR:         [St.SHIFT_IR,      St.EXIT1_IR],
+    St.EXIT1_IR:         [St.PAUSE_IR,      St.UPDATE_IR],
+    St.PAUSE_IR:         [St.PAUSE_IR,      St.EXIT2_IR],
+    St.EXIT2_IR:         [St.SHIFT_IR,      St.UPDATE_IR],
+    St.UPDATE_IR:        [St.RUN_TEST_IDLE, St.SELECT_DR_SCAN],
+}
+
+
 class Decoder(srd.Decoder):
     api_version = 3
     id = 'jtag'
@@ -118,52 +142,12 @@ class Decoder(srd.Decoder):
     def putp_bs(self, data):
         self.put(self.ss_bitstring, self.es_bitstring, self.out_python, data)
 
-    def advance_state_machine(self, tms):
-        self.oldstate = self.state
-
-        # Intro "tree"
-        if self.state == St.TEST_LOGIC_RESET:
-            self.state = St.TEST_LOGIC_RESET if (tms) else St.RUN_TEST_IDLE
-        elif self.state == St.RUN_TEST_IDLE:
-            self.state = St.SELECT_DR_SCAN if (tms) else St.RUN_TEST_IDLE
-
-        # DR "tree"
-        elif self.state == St.SELECT_DR_SCAN:
-            self.state = St.SELECT_IR_SCAN if (tms) else St.CAPTURE_DR
-        elif self.state == St.CAPTURE_DR:
-            self.state = St.EXIT1_DR if (tms) else St.SHIFT_DR
-        elif self.state == St.SHIFT_DR:
-            self.state = St.EXIT1_DR if (tms) else St.SHIFT_DR
-        elif self.state == St.EXIT1_DR:
-            self.state = St.UPDATE_DR if (tms) else St.PAUSE_DR
-        elif self.state == St.PAUSE_DR:
-            self.state = St.EXIT2_DR if (tms) else St.PAUSE_DR
-        elif self.state == St.EXIT2_DR:
-            self.state = St.UPDATE_DR if (tms) else St.SHIFT_DR
-        elif self.state == St.UPDATE_DR:
-            self.state = St.SELECT_DR_SCAN if (tms) else St.RUN_TEST_IDLE
-
-        # IR "tree"
-        elif self.state == St.SELECT_IR_SCAN:
-            self.state = St.TEST_LOGIC_RESET if (tms) else St.CAPTURE_IR
-        elif self.state == St.CAPTURE_IR:
-            self.state = St.EXIT1_IR if (tms) else St.SHIFT_IR
-        elif self.state == St.SHIFT_IR:
-            self.state = St.EXIT1_IR if (tms) else St.SHIFT_IR
-        elif self.state == St.EXIT1_IR:
-            self.state = St.UPDATE_IR if (tms) else St.PAUSE_IR
-        elif self.state == St.PAUSE_IR:
-            self.state = St.EXIT2_IR if (tms) else St.PAUSE_IR
-        elif self.state == St.EXIT2_IR:
-            self.state = St.UPDATE_IR if (tms) else St.SHIFT_IR
-        elif self.state == St.UPDATE_IR:
-            self.state = St.SELECT_DR_SCAN if (tms) else St.RUN_TEST_IDLE
-
     def handle_rising_tck_edge(self, pins):
         (tdi, tdo, tck, tms, trst, srst, rtck) = pins
 
         # Rising TCK edges always advance the state machine.
-        self.advance_state_machine(tms)
+        self.oldstate = self.state
+        self.state = jtag_state_jumps[self.state][tms]
 
         if self.first:
             # Save the start sample and item for later (no output yet).
